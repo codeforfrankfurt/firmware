@@ -42,11 +42,6 @@ void setup() {
     SerialUSB.begin(115200);
     while(!SerialUSB);
         
-#if USE_LORA
-    lora.init();
-    lora.setDeviceDefault();
-#endif
-
 #if USE_GPS
     char c;
     bool locked;
@@ -86,6 +81,9 @@ void setup() {
 #endif
 
 #if USE_LORA
+    lora.init();
+    lora.setDeviceDefault();    
+
     memset(buffer, 0, 256);
     lora.getVersion(buffer, 256, 1);
     SerialUSB.print(buffer); 
