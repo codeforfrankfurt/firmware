@@ -1,6 +1,5 @@
 #define USE_GPS     0
 #define USE_LORA    0
-#define USE_SDS011  1
 
 #include <TimerTCC0.h>
 int sec = 0;
