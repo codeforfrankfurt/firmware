@@ -118,20 +118,19 @@ void setup() {
 void timerIsr(void) {
     sec = (sec + 1) % 6;   
     SerialUSB.println(sec);
-
+#if USE_GPS
     if (sec == 1) {
       Serial.write("h"); //Turn on GPS
     }
-#if USE_GPS
     if (sec == 3) {
       readGPS = true;
     }
-#endif
     if (sec == 5) {
       displayGPSInfo();
       readGPS = false;
       Serial.write("$PMTK161,0*28\r\n");
     }
+#endif
 }
 
 
