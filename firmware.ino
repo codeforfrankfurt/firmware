@@ -122,9 +122,11 @@ void timerIsr(void) {
     if (sec == 1) {
       Serial.write("h"); //Turn on GPS
     }
+#if USE_GPS
     if (sec == 3) {
       readGPS = true;
     }
+#endif
     if (sec == 5) {
       displayGPSInfo();
       readGPS = false;
