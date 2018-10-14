@@ -1,10 +1,21 @@
 #define USE_GPS     0
 #define USE_LORA    0
+#define USE_SDS011  1
 
 #include <TimerTCC0.h>
 int sec = 0;
 
-#ifdef USE_GPS
+#if USE_SDS011
+#include <SDS011.h>
+SDS011 sdsSensor;
+#define SDS_PIN_TX 5
+#define SDS_PIN_RX 6
+float pm25;
+float pm10
+int sdsErrorCode;
+#endif
+
+#if USE_GPS
 #include "TinyGPS++.h"
 TinyGPSPlus gps;
 boolean readGPS = false;
@@ -40,7 +51,11 @@ char buffer[256];
 void setup() {
     SerialUSB.begin(115200);
     while(!SerialUSB);
-        
+
+#if USE_SDS011
+    sdsSensor.begin(SDS_PIN_RX, SDS_PIN_TX);
+#endif
+
 #if USE_GPS
     char c;
     bool locked;
@@ -118,23 +133,47 @@ void setup() {
 void timerIsr(void) {
     sec = (sec + 1) % 6;   
     SerialUSB.println(sec);
+
 #if USE_GPS
     if (sec == 1) {
       Serial.write("h"); //Turn on GPS
     }
+#endif
+#if USE_SDS011
+    if (sec == 2) {
+      readSDS = true;
+    }
+#endif
+#if USE_GPS
     if (sec == 3) {
       readGPS = true;
     }
+#endif
     if (sec == 5) {
+#if USE_SDS011
+      readSDS = false;
+#endif
+#if USE_GPS
       displayGPSInfo();
       readGPS = false;
       Serial.write("$PMTK161,0*28\r\n");
-    }
 #endif
+    }
 }
 
 
 void loop(void) {
+#if USE_SDS011
+  if(readSDS) {
+    // return code is 0, if new values were read, and 1 if there were no new values.
+    sdsErrorCode = sdsSensor(&pm25, &pm10);
+    if (!sdsErrorCode) {
+        SerialUSB.println("PM2.5: " + String(pm25));
+        SerialUSB.println("PM10:  " + String(pm10));
+    }
+  }
+#endif
+
 #if USE_GPS
   if(readGPS) {
       while (Serial.available() > 0){
