@@ -6,12 +6,13 @@
 int sec = 0;
 
 #if USE_SDS011
-#include <SDS011.h>
+#include "SDS011.h"
 SDS011 sdsSensor;
 #define SDS_PIN_TX 5
 #define SDS_PIN_RX 6
+boolean readSDS;
 float pm25;
-float pm10
+float pm10;
 int sdsErrorCode;
 #endif
 
@@ -166,7 +167,7 @@ void loop(void) {
 #if USE_SDS011
   if(readSDS) {
     // return code is 0, if new values were read, and 1 if there were no new values.
-    sdsErrorCode = sdsSensor(&pm25, &pm10);
+    sdsErrorCode = sdsSensor.read(&pm25, &pm10);
     if (!sdsErrorCode) {
         SerialUSB.println("PM2.5: " + String(pm25));
         SerialUSB.println("PM10:  " + String(pm10));
@@ -184,6 +185,7 @@ void loop(void) {
 #endif
 }
 
+#if USE_GPS
 void displayGPSInfo()
 {
   SerialUSB.print(F("Location: ")); 
@@ -234,3 +236,17 @@ void displayGPSInfo()
 
   SerialUSB.println();
 }
+#endif
+
+#if USE_LORA
+void setChannelsForTTN(const float* channels){
+    
+    for(int i = 0; i < 8; i++){
+        // DR0 is the min data rate
+        // UPLINK_DATA_RATE_MAX_EU = DR5 is the max data rate for the EU
+        if(channels[i] != 0){
+          lora.setChannel(i, channels[i], UPLINK_DATA_RATE_MIN, UPLINK_DATA_RATE_MAX_EU);
+        }
+    }
+}
+#endif
