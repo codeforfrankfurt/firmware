@@ -171,7 +171,11 @@ void loop(void) {
     if (!sdsErrorCode) {
         SerialUSB.println("PM2.5: " + String(pm25));
         SerialUSB.println("PM10:  " + String(pm10));
+    } else {
+        SerialUSB.print(F("SDS Error Code: "));
+        SerialUSB.println(sdsErrorCode);
     }
+    readSDS = false;
   }
 #endif
 
@@ -239,8 +243,7 @@ void displayGPSInfo()
 #endif
 
 #if USE_LORA
-void setChannelsForTTN(const float* channels){
-    
+void setChannelsForTTN(const float* channels) {
     for(int i = 0; i < 8; i++){
         // DR0 is the min data rate
         // UPLINK_DATA_RATE_MAX_EU = DR5 is the max data rate for the EU
