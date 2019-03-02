@@ -1,39 +1,59 @@
-#define USE_GPS     0
-#define USE_LORA    0
+#define USE_GPS     1
+#define USE_LORA    1
 #define USE_SDS011  1
+#define USE_DISPLAY 1 //Seeeduino Groovy Display, OLED_Display_96X96-master, v2.2 
+#define USE_ALARM 1 // Passive Buzzer at digital PINs 0 and 1
 
-#include <TimerTCC0.h>
+#include "TimerTCC0.h"
 int sec = 0;
 
 #if USE_SDS011
 #include "SDS011.h"
 SDS011 sdsSensor;
-#define SDS_PIN_TX 5
-#define SDS_PIN_RX 6
+#define SDS_PIN_TX 5 // Seeeduino LoRaWAN GPS Pin 5 (TX) connected to SDS011 Pin RX
+#define SDS_PIN_RX 6 // Seeeduino LoRaWAN GPS Pin 6 (RX) connected to SDS011 Pin TX
 boolean readSDS;
 float pm25;
 float pm10;
 int sdsErrorCode;
 #endif
 
+#if USE_ALARM
+#define ALARM_BUZZER_PIN 0
+const float THRESHOLD_FOR_ALARM_10_PPM = 10.0; 
+const float THRESHOLD_FOR_ALARM_25_PPM = 4.0; 
+#endif
+
 #if USE_GPS
 #include "TinyGPS++.h"
 TinyGPSPlus gps;
 boolean readGPS = false;
+
+const int WAIT_FOR_GPS_DATA = 1000 * 60 * 10; //wait for 10 minutes
+const int WAIT_FOR_GPS_FIX  = 1000 * 60 * 12; //wait for 12 minutes
 #endif
 
 #if USE_LORA
 #include <LoRaWan.h>
 
-#define DEV_ADDR  "foo"
-#define DEV_EUI   "foo"
-#define APP_EUI   "foo"
+// BEGIN-DINKELAKER This are my access codes from https://console.thethingsnetwork.org/applications/dustimeter01/devices/dustimeter01a
+// To submit data via LoRaWAN:
+// 1) Create Account on https://www.thethingsnetwork.org/
+// 2) Goto Console
+// 3) Create Application
+// 4) Register Device 
+// 5) Copy and Past Keys and Addresses
 
-#define NWK_S_KEY "foo"
+#define DEV_ADDR  "foo" // Device: Device Address
+#define DEV_EUI   "foo" // Device: Device EUI
+#define APP_EUI   "foo" // Device: Application EUI
 
-#define APP_S_KEY "foo"
-#define APP_KEY   "foo"
+#define NWK_S_KEY "foo" // Device: Network Session Key
 
+#define APP_S_KEY "foo" // Device: App Session Key
+//#define APP_KEY   "foo" // Application: ACCESS KEYS
+#define APP_KEY   "foo" // Application: ACCESS KEYS
+// END -DINKELAKER
 
 const float EU_channels[8] =    {868.1, 868.3, 868.5, 867.1, 867.3, 867.5, 867.7, 867.9}; //rx 869.525
 #define UPLINK_DATA_RATE_MIN    DR0 //The min uplink data rate for all countries / plans is DR0
@@ -47,17 +67,78 @@ unsigned char frame_counter = 1;
 char buffer[256];
 #endif
 
+#if USE_DISPLAY
+#include <Wire.h>
+#include <SeeedGrayOLED.h>
+#include <avr/pgmspace.h>
+#endif
 
+#if USE_DISPLAY
+void displayStatus(const char *String) {
+  SeeedGrayOled.setTextXY(2,0);  //set Cursor to 2th line, 0th column
+  SeeedGrayOled.setGrayLevel(14); //Set Grayscale level. Any number between 0 - 15.
+  SeeedGrayOled.putString(String); //Print up to 15 chars
+}
+#endif
+
+#if USE_DISPLAY
+void displayDetailOne(const char *String) {  
+  SeeedGrayOled.setTextXY(3,0);  //set Cursor to 2th line, 0th column
+  SeeedGrayOled.setGrayLevel(14); //Set Grayscale level. Any number between 0 - 15.
+  SeeedGrayOled.putString(String); //Print up to 15 chars
+}
+#endif
+
+#if USE_DISPLAY
+void displayDetailTwo(const char *String) {  
+  SeeedGrayOled.setTextXY(4,0);  //set Cursor to 2th line, 0th column
+  SeeedGrayOled.setGrayLevel(14); //Set Grayscale level. Any number between 0 - 15.
+  SeeedGrayOled.putString(String); //Print up to 15 chars
+}
+#endif
 
 void setup() {
+    #if USE_ALARM
+    tone(ALARM_BUZZER_PIN, 3000, 100);
+    delay(100);
+    noTone(ALARM_BUZZER_PIN);
+    #endif
+
     SerialUSB.begin(115200);
     while(!SerialUSB);
 
+#if USE_DISPLAY
+  SerialUSB.println(F("Initializing Groove Display."));
+  Wire.begin();
+  SeeedGrayOled.init(SH1107G);             //initialize SEEED OLED display
+  SeeedGrayOled.clearDisplay();     //Clear Display.
+  SeeedGrayOled.setNormalDisplay(); //Set Normal Display Mode
+  SeeedGrayOled.setVerticalMode();  // Set to vertical mode for displaying text
+  SerialUSB.println(F("Groovy Display initialized."));
+
+  SeeedGrayOled.setTextXY(1,0);  //set Cursor to 1th line, 0th column
+  SeeedGrayOled.setGrayLevel(0); //Set Grayscale level. Any number between 0 - 15.
+  SeeedGrayOled.putString("DustiMeter v0.1 "); //Print up to 15 chars
+#endif
+
+#if USE_DISPLAY
+  displayStatus("Diplay OK       ");
+#endif
+
 #if USE_SDS011
+    #if USE_DISPLAY
+        displayStatus("Check SDS011    ");
+        delay(500);
+    #endif
     sdsSensor.begin(SDS_PIN_RX, SDS_PIN_TX);
+    #if USE_DISPLAY
+        displayStatus("SDS011 seems OK ");
+        delay(500);
+    #endif
 #endif
 
 #if USE_GPS
+    int count = 0;
     char c;
     bool locked;
 
@@ -67,32 +148,71 @@ void setup() {
     // For S&G, let's get the GPS fix now, before we start running arbitary
     // delays for the LoRa section
 
+    SerialUSB.println(F("Check GPS"));
+    #if USE_DISPLAY
+        displayStatus("Initializing GPS");
+        delay(500);
+    #endif
+
     while (!gps.location.isValid()) {
       while (Serial.available() > 0) {
         if (gps.encode(c=Serial.read())) {
           displayGPSInfo();
           if (gps.location.isValid()) {
-//            locked = true;
+            locked = true;
             break;
           }
         }
-//        SerialUSB.print(c);
+        #if USE_DISPLAY
+            //Prints Received GPS coordinates (very detailed)
+            //displayStatus("GPS: "+c);
+            //displayStatus("GPS loop #"+(count++));
+        #endif
+        //SerialUSB.print(c);
       }
 
-//      if (locked)
-//        break;
+      if (locked)
+        break;
 
-      if (millis() > 15000 && gps.charsProcessed() < 10)
+      if (millis() > WAIT_FOR_GPS_DATA && gps.charsProcessed() < 10)
       {
+        #if USE_DISPLAY
+            displayStatus("No GPS detected ");
+            delay(3000);
+        #endif
         SerialUSB.println(F("No GPS detected: check wiring."));
         SerialUSB.println(gps.charsProcessed());
+        #if USE_DISPLAY
+            displayStatus("System halt! G1 ");
+        #endif
         while(true);
       } 
-      else if (millis() > 20000) {
+      else if (millis() > WAIT_FOR_GPS_FIX) {
+        #if USE_DISPLAY
+            displayStatus("No GPS fix      ");
+            delay(3000);
+        #endif
         SerialUSB.println(F("Not able to get a fix in alloted time."));     
-        break;
+        #if USE_DISPLAY
+            displayStatus("System halt! G2 ");
+        #endif
+        while(true);
+        //break;
       }
+      #if USE_DISPLAY
+          displayStatus("Wait f. GPS fix ");
+      #endif      
     }
+    #if USE_DISPLAY
+        //if (locked) {
+            displayStatus("GPS OK         ");
+            delay(1000);
+        //} else {
+        //    displayStatus("GPS not locked ");
+        //    delay(10000);
+        //}
+    #endif      
+    SerialUSB.println(F("GPS OK"));
 #endif
 
 #if USE_LORA
@@ -171,6 +291,29 @@ void loop(void) {
     if (!sdsErrorCode) {
         SerialUSB.println("PM2.5: " + String(pm25));
         SerialUSB.println("PM10:  " + String(pm10));
+
+        #if USE_DISPLAY
+        String value1 = "PM2.5: " + String(pm25);
+        char cvalue1[15];
+        value1.toCharArray(cvalue1,15);
+        displayDetailOne(cvalue1);
+        String value2 = "PM10:  " + String(pm10);
+        char cvalue2[15];
+        value2.toCharArray(cvalue2,15);
+        displayDetailTwo(cvalue2);
+        #endif
+        
+        #if USE_ALARM
+            if (pm25 >= THRESHOLD_FOR_ALARM_25_PPM || pm10 >= THRESHOLD_FOR_ALARM_10_PPM) {
+              tone(ALARM_BUZZER_PIN, 3000, 500);
+              delay(500);
+              tone(ALARM_BUZZER_PIN, 3000, 500);
+              delay(500);
+              tone(ALARM_BUZZER_PIN, 3000, 500);
+              delay(500);
+              noTone(ALARM_BUZZER_PIN);
+            }
+        #endif
     } else {
         SerialUSB.print(F("SDS Error Code: "));
         SerialUSB.println(sdsErrorCode);
