@@ -4,6 +4,7 @@
 
 #include <TimerTCC0.h>
 int sec = 0;
+int secSinceStart = 0;
 
 #if USE_SDS011
 #include "SDS011.h"
@@ -43,8 +44,9 @@ const float EU_channels[8] =    {868.1, 868.3, 868.5, 867.1, 867.3, 867.5, 867.7
 #define FREQ_RX_WNDW_SCND_EU    869.525
 
 #define DEFAULT_RESPONSE_TIMEOUT 5
-unsigned char frame_counter = 1;
+unsigned int frame_counter = 1;
 char buffer[256];
+boolean sendPacket = false;
 #endif
 
 
@@ -113,9 +115,12 @@ void setup() {
     lora.setDeciveMode(LWABP);
     lora.setDataRate(DR0, EU868);   // 0 = SF12 / 125 kHz / 440bps
                                     // 1 = SF11 / 125 kHz / 440bps
-    lora.setPower(7);               // 2 = Max EIRP –  4dB
+                                    // 2 = Max EIRP –  4dB
                                     // 5 = Max EIRP - 10dB - MAX_EIRP_NDX_EU_433
                                     // 7 = Max EIRP - 14dB - MAX_EIRP_NDX_EU_863
+
+    // power is signal strength as well, might override above data rate setting
+    lora.setPower(15);
 
     setChannelsForTTN(EU_channels);
     lora.setReceiceWindowFirst(7, 867.9);
@@ -132,6 +137,19 @@ void setup() {
 
 //interrupt routine
 void timerIsr(void) {
+    secSinceStart += 1;
+
+#if USE_LORA
+    // every minute
+    if (secSinceStart % 60 == 0) {
+      SerialUSB.println("LORA sendPacket=true");
+      sendPacket = true;
+    } else {
+      sendPacket = false;
+    }
+#endif
+
+    // sec is forced to a range of 0-5, so we can decide to do something in either of those seconds
     sec = (sec + 1) % 6;   
     SerialUSB.println(sec);
 
@@ -185,6 +203,15 @@ void loop(void) {
           char currChar = Serial.read();
           gps.encode(currChar);
       }
+  }
+#endif
+
+#if USE_LORA
+  if(sendPacket) {
+    SerialUSB.print("sendAndReceiveLoRaPacket(): ");
+    SerialUSB.println(frame_counter);
+    sendAndReceiveLoRaPacket();
+    frame_counter += 1;
   }
 #endif
 }
@@ -249,6 +276,37 @@ void setChannelsForTTN(const float* channels) {
         // UPLINK_DATA_RATE_MAX_EU = DR5 is the max data rate for the EU
         if(channels[i] != 0){
           lora.setChannel(i, channels[i], UPLINK_DATA_RATE_MIN, UPLINK_DATA_RATE_MAX_EU);
+        }
+    }
+}
+
+void sendAndReceiveLoRaPacket() {
+    bool result = false;
+    char payload[256];
+    memset(payload, 0, 256);
+    String(frame_counter).toCharArray(payload, 256);
+
+    result = lora.transferPacket(payload, 10);
+
+    if(result) {
+        short length;
+        short rssi;
+
+        memset(buffer, 0, 256);
+        length = lora.receivePacket(buffer, 256, &rssi);
+
+        if(length) {
+            SerialUSB.print("Length is: ");
+            SerialUSB.println(length);
+            SerialUSB.print("RSSI is: ");
+            SerialUSB.println(rssi);
+            SerialUSB.print("Data is: ");
+            for(unsigned char i = 0; i < length; i ++) {
+                SerialUSB.print("0x");
+                SerialUSB.print(buffer[i], HEX);
+                SerialUSB.print(" ");
+            }
+            SerialUSB.println();
         }
     }
 }
