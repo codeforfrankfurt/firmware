@@ -175,7 +175,7 @@ void timerIsr(void) {
 #if USE_GPS
       displayGPSInfo();
       readGPS = false;
-      Serial.write("$PMTK161,0*28\r\n");
+//       Serial.write("$PMTK161,0*28\r\n"); // go to standby mode
 #endif
     }
 }
