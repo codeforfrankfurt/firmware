@@ -153,21 +153,21 @@ void timerIsr(void) {
     sec = (sec + 1) % 6;   
     SerialUSB.println(sec);
 
-#if USE_GPS
     if (sec == 1) {
-      Serial.write("h"); //Turn on GPS
-    }
-#endif
-#if USE_SDS011
-    if (sec == 2) {
-      readSDS = true;
-    }
-#endif
 #if USE_GPS
-    if (sec == 3) {
-      readGPS = true;
-    }
+      Serial.write("h"); //Turn on GPS
 #endif
+    }
+    if (sec == 2) {
+#if USE_SDS011
+      readSDS = true;
+#endif
+    }
+    if (sec == 3) {
+#if USE_GPS
+      readGPS = true;
+#endif
+    }
     if (sec == 5) {
 #if USE_SDS011
       readSDS = false;
